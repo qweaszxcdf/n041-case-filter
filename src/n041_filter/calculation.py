@@ -99,6 +99,14 @@ class Calculator:
             return None
         return float(value)
 
+    def median(self, column: str, selector: Selector | None = None) -> float | None:
+        cases = self.cases(selector)
+        values = _numeric_series(cases.df[column])
+        value = values.median()
+        if pd.isna(value):
+            return None
+        return float(value)
+
     def rate(
         self,
         *,

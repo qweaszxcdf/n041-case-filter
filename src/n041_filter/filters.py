@@ -93,6 +93,7 @@ def procedure_mask(
     name=None,
     name_contains=None,
     level=None,
+    incision_healing=None,
     date_start=None,
     date_end=None,
     date_diff_hours=None,
@@ -143,6 +144,15 @@ def procedure_mask(
                 mask &= False
             else:
                 mask &= match_values(df[str(col)], level)
+
+        if incision_healing is not None:
+            col = slot.get("incision_healing")
+            if not col:
+                mask &= False
+            elif incision_healing is any:
+                mask &= present_mask(df[str(col)])
+            else:
+                mask &= match_values(df[str(col)], incision_healing)
 
         if date_start is not None or date_end is not None:
             col = slot.get("date")

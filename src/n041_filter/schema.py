@@ -41,6 +41,7 @@ DEFAULT_SCHEMA = {
             "name": r"^(?:SSJCZMC|SSMC)(?P<slot>\d+)$",
             "date": r"^SSJCZRQ(?P<slot>\d+)$",
             "level": r"^SSJB(?P<slot>\d+)$",
+            "incision_healing": r"^QKYHLB(?P<slot>\d+)$",
         },
         principal_slots=("1",),
     ),

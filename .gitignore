@@ -18,3 +18,4 @@ examples/denominator_cases.xlsx
 output/
 private-data/
 *.dbf
+*.csv

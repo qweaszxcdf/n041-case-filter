@@ -106,7 +106,7 @@ result = cases.result()
 | --- | --- |
 | diagnosis(codes, principal=None, name=None, name_contains=None, admission_condition=None, discharge_condition=None) | 按诊断代码及同槽属性筛选。 |
 | without_diagnosis(codes, **criteria) | 排除命中诊断条件的病例；条件与 diagnosis 相同。 |
-| procedure(codes, principal=None, name=None, name_contains=None, level=None, date_start=None, date_end=None, date_diff_hours=None, params=None) | 按手术代码及同槽属性筛选；`date_diff_hours` 按日期排序后比较相邻候选手术。 |
+| procedure(codes, principal=None, name=None, name_contains=None, level=None, incision_healing=None, date_start=None, date_end=None, date_diff_hours=None, params=None) | 按手术代码及同槽属性筛选；`incision_healing` 对应切口愈合类别 `QKYHLB`，传入 `any` 表示非空；`date_diff_hours` 按日期排序后比较相邻候选手术。 |
 | without_procedure(codes, **criteria) | 排除命中手术条件的病例；条件与 procedure 相同。 |
 | where(column, values) / exclude(column, values) | 普通字段精确匹配或排除；values 可为单值或列表。 |
 | filter(predicate) | 接收当前完整 `DataFrame`，返回按 index 对齐的布尔 mask。 |
@@ -240,9 +240,12 @@ slot 属性与现有 filter 的对应关系：
 | discharge_condition | discharge_condition |
 | date | date_start / date_end / date_diff_hours |
 | level | level |
+| incision_healing | incision_healing（切口愈合类别 QKYHLB） |
 | principal | principal |
 
 `procedure()` 默认按任一 procedure slot 匹配。`date_start` / `date_end` 是绝对日期；`date_diff_hours` 会先筛选满足其他手术条件的 slot，再按手术日期升序排列，只比较相邻候选手术的时间差：
+
+`incision_healing=any` 表示当前手术 slot 的 `QKYHLB` 有值；空字符串、空白和缺失值不匹配，数值或字符串 `"0"` 仍属于非空值。
 
 ~~~python
 # 相邻的满足 codes 条件的手术，时间差不超过 48 小时
