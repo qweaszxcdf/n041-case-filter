@@ -107,6 +107,7 @@ result = cases.result()
 | procedure(codes, principal=None, name=None, name_contains=None, level=None, date_start=None, date_end=None, date_diff_hours=None, params=None) | 按手术代码及同槽属性筛选；`date_diff_hours` 按日期排序后比较相邻候选手术。 |
 | without_procedure(codes, **criteria) | 排除命中手术条件的病例；条件与 procedure 相同。 |
 | where(column, values) / exclude(column, values) | 普通字段精确匹配或排除；values 可为单值或列表。 |
+| filter(predicate) | 接收当前完整 `DataFrame`，返回按 index 对齐的布尔 mask。 |
 | contains(column, values) / not_contains(column, values) | 普通字段包含或排除文本；不区分大小写。 |
 | numeric_between(column, start=None, end=None) | 包含边界的数值范围；支持带千分位的费用文本。 |
 | present(column) / missing(column) | 非空或空值筛选；空字符串、空白和缺失值视为无值。 |
@@ -125,6 +126,33 @@ cases = (
     .numeric_between("ZFY", 10000, 50000)
 )
 ~~~
+
+### 自定义筛选
+
+`filter()` 的 predicate 接收当前完整 `DataFrame`，返回按 index 对齐的布尔 mask。适合比较两栏、组合复杂条件或使用暂未内置的判断：
+
+~~~python
+import pandas as pd
+
+def stay_within_30_days(data):
+    admitted = pd.to_datetime(data["RYSJ"], format="mixed", errors="coerce")
+    discharged = pd.to_datetime(data["CYSJ"], format="mixed", errors="coerce")
+    hours = (discharged - admitted).dt.total_seconds() / 3600
+    return hours.between(0, 720, inclusive="both")
+
+cases = CaseFilter(df).filter(stay_within_30_days)
+~~~
+
+自定义筛选可以继续链式调用，也可以用于 `Calculator` 的分子或分母 selector：
+
+~~~python
+result = calc.rate(
+    denominator=lambda c: c.filter(stay_within_30_days),
+    numerator=lambda c: c.procedure(level="4"),
+)
+~~~
+
+DataFrame predicate 应使用向量化表达式；大表上的常见条件仍应优先使用内置 filter。
 
 ## slot 规则与 schema
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 import pandas as pd
 
 from .filters import (
@@ -118,6 +118,35 @@ class CaseFilter:
 
     def where(self, column: str, values) -> "CaseFilter":
         return self._subset(value_mask(self.df, column, values))
+
+    def filter(
+        self,
+        predicate: Callable[[pd.DataFrame], object],
+    ) -> "CaseFilter":
+        """Apply a custom predicate to the current complete DataFrame.
+
+        The predicate receives the current DataFrame and must return a boolean
+        Series, array-like mask, or scalar boolean. The DataFrame should be
+        treated as read-only.
+        """
+
+        if not callable(predicate):
+            raise TypeError("predicate must be callable")
+
+        raw_mask = predicate(self.df)
+        if isinstance(raw_mask, pd.Series):
+            if not raw_mask.index.is_unique:
+                raise ValueError("custom predicate result must have a unique index")
+            mask = raw_mask.reindex(self.df.index)
+        else:
+            mask = pd.Series(raw_mask, index=self.df.index)
+
+        try:
+            mask = mask.astype("boolean").fillna(False).astype(bool)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("predicate must return a boolean mask") from exc
+
+        return self._subset(mask)
 
     def exclude(self, column: str, values) -> "CaseFilter":
         """Exclude cases whose field equals any supplied value."""
