@@ -57,7 +57,7 @@ examples/example.py 也是推荐模板。需要新指标或新筛选时，直接
 
 病案首页字段应尽量保留原始表头，尤其是诊断、手术、手术日期、入院日期和出院日期字段，便于默认 schema 自动发现和同槽绑定。
 
-load_table() 支持 CSV、XLSX、XLS、Parquet 和 DBF，并保持原始扁平列名。CSV/Excel 中的字段按字符串读取，空单元格保持为 `""`，适合保留代码前导零和空值语义：
+load_table() 支持 CSV、XLSX、XLS 和 DBF，并保持原始扁平列名。CSV/Excel 中的字段按字符串读取，空单元格保持为 `""`，适合保留代码前导零和空值语义：
 
 ~~~python
 from n041_filter import load_table
@@ -66,6 +66,8 @@ df = load_table("cases.csv", encoding="utf-8")
 ~~~
 
 默认 CSV 编码为 gbk；CSV 若使用 UTF-8，请显式传 encoding="utf-8"。
+
+DBF 默认使用严格字符解码；如果明确接受坏字节被忽略，可传 `errors="ignore"`。`CaseFilter` 要求输入 `DataFrame.index` 唯一；如果数据拼接后产生重复索引，请先调用 `reset_index(drop=True)`。
 
 ## 快速开始
 
@@ -252,7 +254,9 @@ thirty_days = CaseFilter(df).procedure("36.", date_diff_hours=(24, 720))
 
 `date_diff_hours` 的单位是小时。传入单个整数 `N` 表示时间差 `0 <= diff <= N`；传入 `(start, end)` 表示闭区间，精确值可写为 `(N, N)`。时间差按排序后的相邻日期计算，区间两端均包含；日期列包含时分秒时会保留到实际时间计算。与 `codes`、`level`、`name`、`params` 一起使用时，这些条件绑定在参与比较的候选手术 slot 上。`without_procedure(..., date_diff_hours=...)` 也支持同样的条件。
 
-只在 schema 中增加一个没有对应参数的属性，它只会出现在 cases.slots() 中，不会自动成为 filter。
+日期范围的纯日期 `end`（例如 `"2025-12-31"`）包含该日期的整天；如果传入带时间的值，则按精确时间作为上界。
+
+只在 schema 中增加一个没有对应参数的属性，它只会出现在 cases.slots() 中，不会自动成为 filter。同一 slot 的同一 repeated 属性如果匹配多个列，会抛出 `ValueError`，不会按输入列顺序静默选择。
 
 ### 新增对应 filter
 
@@ -324,6 +328,8 @@ count = calc.count(lambda c: c.diagnosis("I21"))
 total_cost = calc.sum("ZFY", lambda c: c.diagnosis("I21"))
 average_cost = calc.mean("ZFY", lambda c: c.diagnosis("I21"))
 ~~~
+
+`sum()` 和 `mean()` 与 `numeric_between()` 使用相同的数值解析规则，费用文本中的英文千分位逗号会被正确处理。
 
 分子筛选会应用在分母病例集上：
 

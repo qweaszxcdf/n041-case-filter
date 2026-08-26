@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from numbers import Integral
+import re
 
 import numpy as np
 import pandas as pd
@@ -252,8 +254,20 @@ def date_between_mask(df: pd.DataFrame, column: str, *, start=None, end=None) ->
     if start is not None:
         mask &= values >= pd.Timestamp(start)
     if end is not None:
-        mask &= values <= pd.Timestamp(end)
+        end_value = pd.Timestamp(end)
+        if _is_date_only(end):
+            mask &= values < end_value + pd.Timedelta(days=1)
+        else:
+            mask &= values <= end_value
     return mask
+
+
+def _is_date_only(value) -> bool:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return True
+    return isinstance(value, str) and bool(
+        re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip())
+    )
 
 
 def value_mask(df: pd.DataFrame, column: str, values) -> pd.Series:

@@ -50,6 +50,15 @@ def normalize_value(value):
     if value is None:
         return ""
 
+    missing = pd.isna(value)
+    try:
+        if bool(missing):
+            return ""
+    except (TypeError, ValueError):
+        # Non-scalar values are not expected in a normal cell, but retain the
+        # existing string-normalization behavior if one is supplied.
+        pass
+
     text = str(value).strip()
 
     # 4.0 / 4.00 -> 4
@@ -95,8 +104,7 @@ def numeric_between(series: pd.Series, *, start=None, end=None) -> pd.Series:
     exported fee columns such as ``ZFY``.
     """
 
-    actual = normalized_text(series).str.replace(",", "", regex=False)
-    numbers = pd.to_numeric(actual, errors="coerce")
+    numbers = _numeric_series(series)
     mask = numbers.notna()
 
     def bound(value):
@@ -114,6 +122,11 @@ def numeric_between(series: pd.Series, *, start=None, end=None) -> pd.Series:
     if upper is not None:
         mask &= numbers <= upper
     return mask
+
+
+def _numeric_series(series: pd.Series) -> pd.Series:
+    actual = normalized_text(series).str.replace(",", "", regex=False)
+    return pd.to_numeric(actual, errors="coerce")
 
 
 def present_mask(series: pd.Series) -> pd.Series:

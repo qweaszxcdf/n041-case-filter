@@ -67,7 +67,9 @@ def discover_slots(columns: Iterable[str], schema: SlotSchema) -> list[dict[str,
     """Discover logical slots from flat-table columns.
 
     Returned items contain actual column names. Repeated attributes are bound by
-    the same captured `slot` value, preventing cross-slot mismatches.
+    the same captured `slot` value, preventing cross-slot mismatches. Multiple
+    columns matching one repeated attribute in one slot are rejected as an
+    ambiguous schema.
     """
 
     cols = [str(c) for c in columns]
@@ -82,7 +84,7 @@ def discover_slots(columns: Iterable[str], schema: SlotSchema) -> list[dict[str,
         if "code" in item:
             result.append(item)
 
-    repeated: dict[str, dict[str, object]] = {}
+    repeated_matches: dict[tuple[str, str], list[str]] = {}
     for attr, pattern in schema.repeated.items():
         regex = re.compile(pattern)
         if "slot" not in regex.groupindex:
@@ -95,10 +97,21 @@ def discover_slots(columns: Iterable[str], schema: SlotSchema) -> list[dict[str,
             if not match:
                 continue
             slot = match.group("slot")
-            repeated.setdefault(
-                slot,
-                {"slot": slot, "principal": slot in schema.principal_slots},
-            )[attr] = col
+            repeated_matches.setdefault((slot, attr), []).append(col)
+
+    for (slot, attr), matches in repeated_matches.items():
+        if len(matches) > 1:
+            raise ValueError(
+                f"Repeated schema attribute {attr!r} matched multiple columns "
+                f"for slot {slot!r}: {matches}"
+            )
+
+    repeated: dict[str, dict[str, object]] = {}
+    for (slot, attr), matches in repeated_matches.items():
+        repeated.setdefault(
+            slot,
+            {"slot": slot, "principal": slot in schema.principal_slots},
+        )[attr] = matches[0]
 
     for slot in sorted(repeated, key=_sort_slot):
         item = repeated[slot]

@@ -27,6 +27,11 @@ class CaseFilter:
     procedure_params: object | None = None
 
     def __post_init__(self):
+        if not self.df.index.is_unique:
+            raise ValueError(
+                "CaseFilter requires a unique DataFrame index; "
+                "use df.reset_index(drop=True)"
+            )
         object.__setattr__(self, "schema", self.schema or DEFAULT_SCHEMA)
         object.__setattr__(self, "procedure_params", load_procedure_params(self.procedure_params))
         object.__setattr__(self, "diagnosis_slots", discover_slots(self.df.columns, self.schema["diagnosis"]))

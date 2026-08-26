@@ -4,8 +4,17 @@ from pathlib import Path
 import pandas as pd
 
 
-def load_table(path: str | Path, *, encoding: str = "gbk") -> pd.DataFrame:
-    """Load a flat table while preserving text fields and empty cells."""
+def load_table(
+    path: str | Path,
+    *,
+    encoding: str = "gbk",
+    errors: str = "strict",
+) -> pd.DataFrame:
+    """Load CSV/XLSX/XLS/DBF while preserving text fields and empty cells.
+
+    For DBF inputs, ``errors`` is passed to the character decoder and defaults
+    to strict decoding.
+    """
 
     path = Path(path)
     suffix = path.suffix.lower()
@@ -23,8 +32,6 @@ def load_table(path: str | Path, *, encoding: str = "gbk") -> pd.DataFrame:
             dtype=str,
             keep_default_na=False,
         )
-    if suffix == ".parquet":
-        return pd.read_parquet(path)
     if suffix == ".dbf":
         try:
             from dbfread import DBF
@@ -32,7 +39,7 @@ def load_table(path: str | Path, *, encoding: str = "gbk") -> pd.DataFrame:
             raise RuntimeError(
                 "DBF support requires the optional dependency: pip install 'n041-case-filter[dbf]'"
             ) from exc
-        table = DBF(str(path), encoding=encoding, char_decode_errors="ignore")
+        table = DBF(str(path), encoding=encoding, char_decode_errors=errors)
         return pd.DataFrame(iter(table))
 
     raise ValueError(f"Unsupported input format: {suffix}")

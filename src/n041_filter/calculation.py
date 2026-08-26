@@ -7,6 +7,7 @@ import pandas as pd
 
 from .engine import CaseFilter
 from .schema import SlotSchema
+from .utils import _numeric_series
 
 
 Selector = Callable[[CaseFilter], CaseFilter]
@@ -87,12 +88,12 @@ class Calculator:
 
     def sum(self, column: str, selector: Selector | None = None) -> float:
         cases = self.cases(selector)
-        values = pd.to_numeric(cases.df[column], errors="coerce")
+        values = _numeric_series(cases.df[column])
         return float(values.sum())
 
     def mean(self, column: str, selector: Selector | None = None) -> float | None:
         cases = self.cases(selector)
-        values = pd.to_numeric(cases.df[column], errors="coerce")
+        values = _numeric_series(cases.df[column])
         value = values.mean()
         if pd.isna(value):
             return None
