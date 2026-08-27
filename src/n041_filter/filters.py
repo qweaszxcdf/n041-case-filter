@@ -94,6 +94,9 @@ def procedure_mask(
     name_contains=None,
     level=None,
     incision_healing=None,
+    unplanned=None,
+    day_surgery=None,
+    operation_type=None,
     date_start=None,
     date_end=None,
     date_diff_hours=None,
@@ -153,6 +156,21 @@ def procedure_mask(
                 mask &= present_mask(df[str(col)])
             else:
                 mask &= match_values(df[str(col)], incision_healing)
+
+        for attribute, values in (
+            ("unplanned", unplanned),
+            ("day_surgery", day_surgery),
+            ("operation_type", operation_type),
+        ):
+            if values is None:
+                continue
+            col = slot.get(attribute)
+            if not col:
+                mask &= False
+            elif values is any:
+                mask &= present_mask(df[str(col)])
+            else:
+                mask &= match_values(df[str(col)], values, case_insensitive=True)
 
         if date_start is not None or date_end is not None:
             col = slot.get("date")

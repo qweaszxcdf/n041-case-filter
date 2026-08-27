@@ -68,13 +68,16 @@ def normalize_value(value):
     return text
 
 
-def match_values(series, values):
+def match_values(series, values, *, case_insensitive: bool = False):
     wanted = {
         normalize_value(v)
         for v in (as_list(values) or [])
     }
 
     actual = series.map(normalize_value)
+    if case_insensitive:
+        wanted = {value.upper() for value in wanted}
+        actual = actual.str.upper()
 
     return actual.isin(wanted)
 

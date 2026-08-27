@@ -19,3 +19,4 @@ output/
 private-data/
 *.dbf
 *.csv
+*.xlsx

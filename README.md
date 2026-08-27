@@ -2,7 +2,70 @@
 
 面向病案首页导出原始扁平表的 N041 病例筛选、数据提取与基础计算工具。
 
-项目提供“筛选病例 + 提取明细 + 通用计算”，不内置特定评审指标公式。调用方可以组合筛选条件，再使用 count / sum / mean / rate 计算自己的指标。
+项目提供“筛选病例 + 提取明细 + 通用计算”，并内置 2026 年上海市医院评审细则中可由住院病案首页直接、可靠重建的一组指标。调用方也可以组合筛选条件，再使用 count / sum / mean / rate 计算自己的指标。
+
+## 评审细则病案首页指标
+
+`HomepageIndicators` 一次计算首页能够支持的病种/术种数量、平均住院日、三四级手术比例、日间手术比例、住院/手术/新生儿死亡率、再入院与再次手术、住院费用，以及评审细则给出 ICD-10 编码的手术、分娩和其他并发症指标：
+
+~~~python
+from n041_filter import HomepageIndicators, SpecialtyDefinition, load_table
+
+df = load_table("cases.csv", encoding="utf-8")
+report = HomepageIndicators(
+    df,
+    discharge_method_column="LYFS",  # 国家首页“离院方式”，5=死亡
+    stay_days_column="SJZYTS",       # 可省略；缺少时用 RYSJ/CYSJ 计算
+    newborn_age_days_column="RYQNL", # 可选，提供后计算新生儿指标
+    patient_id_column="SFZH",         # 可选，提供后计算31天再住院
+    total_cost_column="ZFY",
+    drug_cost_column="XYF",          # 需要“药品费用”口径时可自行合计中西药字段
+    # 本地首页的布尔/标志字段；值默认识别 1/是/Y/YES/TRUE
+    cohort_columns={
+        "day_surgery": "RJSSBZ",
+        "elective_surgery": "ZQSSBZ",
+        "infusion": "SFBYSY",
+        "transfusion": "SFSX",
+        "fall": "SFDD",
+        "hemodialysis": "SFXYTX",
+        "hospital_infection": "YYGR",
+        "incision_class_i": "YLQK",
+        "incision_infection": "QKGR",
+        "clinical_pathway": "LCLJ",
+    },
+    # 若首页的“入院病情”4 表示住院后发生，可避免把既往合并症
+    # 错计成院内/术后并发症；不传则兼容缺少入院病情的导出表。
+    complication_admission_conditions=["4"],
+).to_frame()
+report.to_excel("homepage_indicators.xlsx", index=False)
+
+# 科室运行、死亡、手术、抢救、住院日和费用指标
+department_report = HomepageIndicators(df).by_department("CYKB")
+
+# 44 专科目录完整内置；评审附件没有发布 ICD 值集，因此应接入本院
+# 审核后的编码目录，而不是按疾病名称做不可靠的模糊匹配。
+specialty_report = HomepageIndicators(df).specialty_summary({
+    "心血管内科": SpecialtyDefinition(
+        name="心血管内科",
+        department_values=("心血管内科", "心内科"),
+        key_diseases={"急性心肌梗死": ("I21",)},
+        key_technologies={"经皮冠状动脉介入治疗": ("36.0",)},
+    )
+})
+
+# 统一查看可直接计算、需要字段、仅供复核和无法由首页计算的项目
+availability = HomepageIndicators(df).indicator_catalog()
+~~~
+
+返回列为 `key / name / numerator / denominator / value / unit`。百分比的 `value` 已乘 100；分母为 0 时为 `None`。诊断并发症会检查所有诊断 slot；三四级手术比例复用 `CaseFilter.procedure()`，按病例数统计，并要求手术代码和切口愈合类别均非空。
+
+阴道分娩和剖宫产的手术编码可能采用本地扩展，只有显式传入 `vaginal_delivery_codes` / `cesarean_codes` 时才计算对应指标。`cohort_columns` 用于对接各院首页扩展字段；没有相应字段的指标不会出现在结果中。再次手术和再住院先按首页日期计算候选值，正式上报时仍须结合“非计划/非预期”标志复核。
+
+同比费用指标使用当前年度计算器调用 `growth_from(上一年度计算器)`。DRG/CMI、低风险组、导管留置天数、器官捐献和治疗过程等指标需要分组器、设备日或首页之外的数据，因此不会仅凭诊断代码猜测。可使用下文的 `Calculator` 与本院参数继续扩展。
+
+针对本文所列的上海首页 header，以下字段会自动使用，无需 `cohort_columns`：`SFJHZCRY` 非计划再入院、`SSLCLJ` 临床路径、`QJCS/QJCGCS` 抢救、`SWHZSJ` 尸检、`SFJHSS1..20` 非计划再次手术、`SFRJSS1..20` 日间手术、`SSLX1..20` 手术类型、`BAZL` 病案质量、`ZZJHSMC/JRSJ/TCSJ1..5` ICU、`YCHXJSYSJ` 有创呼吸机、`SXL_U/SXL_ML1..6` 输血量、`SXFY` 输血反应、`XSRTZ/XSRXB1..5` 新生儿和 `CHCX` 产后出血。全部现有费用分项也会生成次均费用及占总费用比例。
+
+`SPECIALTY_NAMES` 和 `empty_specialty_catalog()` 包含评审附件的全部 44 个专科。附件只给出重点病种/关键技术名称和例数要求，没有给出权威 ICD-10/ICD-9-CM-3 值集；`specialty_summary()` 因此要求传入医院审核后的 `SpecialtyDefinition` 编码映射。也可用 `load_specialty_catalog()` 读取 CSV/XLSX，列为 `specialty/category/item/codes/department_values`，多个编码或科室值用 `|` 分隔。空目录项目会明确输出“需要字段”，不会通过中文名称模糊匹配伪造统计结果。
 
 ## 适用范围
 
@@ -106,7 +169,7 @@ result = cases.result()
 | --- | --- |
 | diagnosis(codes, principal=None, name=None, name_contains=None, admission_condition=None, discharge_condition=None) | 按诊断代码及同槽属性筛选。 |
 | without_diagnosis(codes, **criteria) | 排除命中诊断条件的病例；条件与 diagnosis 相同。 |
-| procedure(codes, principal=None, name=None, name_contains=None, level=None, incision_healing=None, date_start=None, date_end=None, date_diff_hours=None, params=None) | 按手术代码及同槽属性筛选；`incision_healing` 对应切口愈合类别 `QKYHLB`，传入 `any` 表示非空；`date_diff_hours` 按日期排序后比较相邻候选手术。 |
+| procedure(codes, principal=None, name=None, name_contains=None, level=None, incision_healing=None, unplanned=None, day_surgery=None, operation_type=None, date_start=None, date_end=None, date_diff_hours=None, params=None) | 按手术代码及同槽属性筛选；`incision_healing`、`unplanned`、`day_surgery`、`operation_type` 均支持 `any` 表示非空；`date_diff_hours` 按日期排序后比较相邻候选手术。 |
 | without_procedure(codes, **criteria) | 排除命中手术条件的病例；条件与 procedure 相同。 |
 | where(column, values) / exclude(column, values) | 普通字段精确匹配或排除；values 可为单值或列表。 |
 | filter(predicate) | 接收当前完整 `DataFrame`，返回按 index 对齐的布尔 mask。 |
@@ -241,6 +304,9 @@ slot 属性与现有 filter 的对应关系：
 | date | date_start / date_end / date_diff_hours |
 | level | level |
 | incision_healing | incision_healing（切口愈合类别 QKYHLB） |
+| unplanned | 首页非计划手术标志（SFJHSS） |
+| day_surgery | 首页日间手术标志（SFRJSS） |
+| operation_type | 首页手术类型（SSLX） |
 | principal | principal |
 
 `procedure()` 默认按任一 procedure slot 匹配。`date_start` / `date_end` 是绝对日期；`date_diff_hours` 会先筛选满足其他手术条件的 slot，再按手术日期升序排列，只比较相邻候选手术的时间差：
@@ -255,7 +321,7 @@ two_days = CaseFilter(df).procedure("36.", date_diff_hours=48)
 thirty_days = CaseFilter(df).procedure("36.", date_diff_hours=(24, 720))
 ~~~
 
-`date_diff_hours` 的单位是小时。传入单个整数 `N` 表示时间差 `0 <= diff <= N`；传入 `(start, end)` 表示闭区间，精确值可写为 `(N, N)`。时间差按排序后的相邻日期计算，区间两端均包含；日期列包含时分秒时会保留到实际时间计算。与 `codes`、`level`、`name`、`params` 一起使用时，这些条件绑定在参与比较的候选手术 slot 上。`without_procedure(..., date_diff_hours=...)` 也支持同样的条件。
+`date_diff_hours` 的单位是小时。传入单个整数 `N` 表示时间差 `0 <= diff <= N`；传入 `(start, end)` 表示闭区间，精确值可写为 `(N, N)`。时间差按排序后的相邻日期计算，区间两端均包含；日期列包含时分秒时会保留到实际时间计算。与 `codes`、`level`、`name`、`unplanned`、`day_surgery`、`operation_type`、`params` 一起使用时，这些条件绑定在参与比较的候选手术 slot 上。`without_procedure(..., date_diff_hours=...)` 也支持同样的条件。
 
 日期范围的纯日期 `end`（例如 `"2025-12-31"`）包含该日期的整天；如果传入带时间的值，则按精确时间作为上界。
 
